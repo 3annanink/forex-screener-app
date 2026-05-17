@@ -1,13 +1,14 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 import yfinance as yf
+import requests
 
 st.set_page_config(
-    page_title="Hybrid SMC Screener",
+    page_title="Hybrid SMC Screener Pro",
     page_icon="🧠",
     layout="wide",
 )
@@ -33,7 +34,11 @@ st.markdown("""
     .badge-crypto { background: linear-gradient(135deg,#fa709a,#fee140); color:#111827; }
     .badge-smc    { background: linear-gradient(135deg,#ffd700,#ffed4e); color:#111827; }
     .badge-mtf    { background: linear-gradient(135deg,#4facfe,#00f2fe); color:#0b1220; }
+    .badge-news   { background: linear-gradient(135deg,#ff6b6b,#ee5a6f); color:white; }
     .grid2 { display:grid; grid-template-columns:1fr 1fr; grid-gap:12px; }
+    .news-critical { background:#dc2626; padding:12px; border-radius:8px; margin:10px 0; color:white; font-weight:700; }
+    .news-warning  { background:#f59e0b; padding:12px; border-radius:8px; margin:10px 0; color:white; }
+    .news-info     { background:#3b82f6; padding:10px; border-radius:8px; margin:10px 0; color:white; font-size:13px; }
     @media(max-width:900px){ .grid2{ grid-template-columns:1fr; } }
 </style>
 """, unsafe_allow_html=True)
@@ -42,13 +47,149 @@ st.markdown("""
 <div style='background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
             padding:24px;border-radius:16px;color:white;margin-bottom:16px;
             box-shadow:0 14px 28px rgba(0,0,0,0.25);text-align:center;'>
-  <div style='font-size:32px;font-weight:900;'>🧠 HYBRID SMC SCREENER</div>
+  <div style='font-size:32px;font-weight:900;'>🧠 HYBRID SMC SCREENER PRO</div>
   <div style='font-size:14px;opacity:0.95;margin-top:6px;'>
     Order Blocks · Fair Value Gaps · BOS · Liquidity · Premium/Discount
-    + RSI · MACD · MAs · ADX · MTF Confirmation
+    + RSI · MACD · MAs · ADX · MTF Confirmation · 📰 NEWS FILTER
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEWS FILTER CLASS
+# ═════════════════════════════════════════════════════════════════════════════
+
+class NewsFilter:
+    """Economic Calendar Filter - Forex Factory API"""
+    
+    BASE_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+    
+    CURRENCY_MAP = {
+        "EUR/USD": ["EUR", "USD"], 
+        "GBP/USD": ["GBP", "USD"],
+        "USD/JPY": ["USD", "JPY"], 
+        "AUD/USD": ["AUD", "USD"],
+        "USD/CAD": ["USD", "CAD"], 
+        "NZD/USD": ["NZD", "USD"],
+        "USD/CHF": ["USD", "CHF"], 
+        "XAU/USD": ["USD"],
+        "XAG/USD": ["USD"], 
+        "BTC/USD": [], 
+        "ETH/USD": [],
+        "SOL/USD": [], 
+        "BNB/USD": []
+    }
+    
+    HIGH_IMPACT_KEYWORDS = [
+        "NFP", "Non-Farm", "Employment Change", "Unemployment",
+        "Interest Rate", "Fed", "FOMC", "ECB", "BoE", "BoJ", "RBA", "RBNZ",
+        "GDP", "CPI", "Inflation", "Core CPI", "PPI",
+        "Retail Sales", "PMI Manufacturing", "PMI Services",
+        "Trade Balance", "Consumer Confidence"
+    ]
+    
+    @staticmethod
+    @st.cache_data(ttl=600, show_spinner=False)
+    def fetch_news():
+        """Fetch news dari Forex Factory, cache 10 menit"""
+        try:
+            response = requests.get(NewsFilter.BASE_URL, timeout=10)
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except Exception as e:
+            st.warning(f"⚠️ News API unavailable: {str(e)[:50]}")
+            return []
+    
+    def parse_news(self):
+        """Parse raw news jadi format yang mudah dipakai"""
+        raw = self.fetch_news()
+        now = datetime.now()
+        upcoming = []
+        
+        for event in raw:
+            try:
+                # Parse waktu event
+                event_time_str = event.get('date', '')
+                if not event_time_str:
+                    continue
+                
+                event_time = datetime.strptime(
+                    event_time_str, '%Y-%m-%dT%H:%M:%S%z'
+                ).replace(tzinfo=None)
+                
+                # Cek impact level
+                impact = event.get('impact', '')
+                title = event.get('title', '')
+                country = event.get('country', '')
+                
+                # Filter hanya high impact
+                is_high_impact = (
+                    impact == 'High' or 
+                    any(keyword in title for keyword in self.HIGH_IMPACT_KEYWORDS)
+                )
+                
+                if not is_high_impact:
+                    continue
+                
+                # Hitung selisih waktu dalam menit
+                time_diff_seconds = (event_time - now).total_seconds()
+                minutes_until = int(time_diff_seconds / 60)
+                
+                # Filter: -30 menit sampai +4 jam
+                if -30 <= minutes_until <= 240:
+                    # Tentukan status
+                    if minutes_until < 0:
+                        status = "ONGOING"
+                    elif minutes_until <= 30:
+                        status = "IMMINENT"  # Kritis
+                    elif minutes_until <= 120:
+                        status = "WARNING"   # Hati-hati
+                    else:
+                        status = "UPCOMING"  # Info saja
+                    
+                    upcoming.append({
+                        'currency': country,
+                        'title': title,
+                        'time': event_time,
+                        'minutes': minutes_until,
+                        'status': status,
+                        'impact': impact,
+                        'time_str': event_time.strftime('%H:%M')
+                    })
+            
+            except Exception:
+                continue
+        
+        # Sort by waktu terdekat
+        return sorted(upcoming, key=lambda x: x['minutes'])
+    
+    def check_pair(self, pair):
+        """Cek apakah pair terpengaruh upcoming news"""
+        currencies = self.CURRENCY_MAP.get(pair, [])
+        
+        # Crypto tidak terpengaruh fundamental news
+        if not currencies:
+            return None
+        
+        all_news = self.parse_news()
+        
+        # Filter news yang affect pair ini
+        affected_news = [
+            news for news in all_news 
+            if news['currency'] in currencies
+        ]
+        
+        if not affected_news:
+            return None
+        
+        # Return news paling dekat
+        return affected_news[0]
+    
+    def get_all_upcoming(self):
+        """Get semua upcoming news untuk dashboard"""
+        return self.parse_news()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPER MATH
@@ -230,7 +371,7 @@ class HybridSMCScreener:
         df["macd"]       = df["ema12"] - df["ema26"]
         df["macd_sig"]   = calc_ema(df["macd"], 9)
         df["atr"]        = calc_atr(df, 14)
-        df["adx"]        = calc_adx(df, 14)   # ← fixed version
+        df["adx"]        = calc_adx(df, 14)
         return df
 
     # ── SMC ──────────────────────────────────────────────────────────────────
@@ -254,12 +395,9 @@ class HybridSMCScreener:
         bull_fvg, bear_fvg = [], []
         for i in range(1, len(d) - 1):
             c1, c3 = d.loc[i-1], d.loc[i+1]
-            # Bullish FVG: c3.low > c1.high
             if float(c3["low"]) > float(c1["high"]):
                 bot, top = float(c1["high"]), float(c3["low"])
-                # check not mitigated (simplified)
                 bull_fvg.append({"top": top, "bot": bot, "mid": (top+bot)/2, "size": top-bot})
-            # Bearish FVG: c3.high < c1.low
             if float(c3["high"]) < float(c1["low"]):
                 bot, top = float(c3["high"]), float(c1["low"])
                 bear_fvg.append({"top": top, "bot": bot, "mid": (top+bot)/2, "size": top-bot})
@@ -379,7 +517,8 @@ class HybridSMCScreener:
 
     def analyze(self, pair, tf, enable_mtf, enable_adx, adx_min,
                 min_confluence, entry_mode,
-                ob_on, fvg_on, bos_on, liq_on):
+                ob_on, fvg_on, bos_on, liq_on,
+                news_filter_on, news_buffer_mins):
 
         df = self.fetch(pair, tf)
         if df is None:
@@ -393,11 +532,31 @@ class HybridSMCScreener:
         adx_val = float(lt["adx"]) if not np.isnan(lt["adx"]) else 0.0
         rsi_val = float(lt["rsi"]) if not np.isnan(lt["rsi"]) else 50.0
 
+        # ═══ NEWS FILTER ═══════════════════════════════════════════════════
+        news_info = None
+        if news_filter_on:
+            nf = NewsFilter()
+            news_info = nf.check_pair(pair)
+            
+            if news_info and news_info['minutes'] <= news_buffer_mins:
+                return {
+                    "pair": pair, 
+                    "status": "NEWS_BLOCK", 
+                    "signal": "HOLD",
+                    "reason": f"🚨 {news_info['title']} in {news_info['minutes']}m",
+                    "news": news_info,
+                    "price": cp, 
+                    "adx": adx_val, 
+                    "rsi": rsi_val, 
+                    "tf": tf
+                }
+
         # ADX filter
         if enable_adx and adx_val < adx_min:
             return {"pair": pair, "status": "FILTERED", "signal": "HOLD",
                     "reason": f"ADX {adx_val:.1f} < {adx_min}",
-                    "price": cp, "adx": adx_val, "rsi": rsi_val, "tf": tf}
+                    "price": cp, "adx": adx_val, "rsi": rsi_val, "tf": tf,
+                    "news": news_info}
 
         # Traditional
         trad = self.trad_score(df)
@@ -408,21 +567,19 @@ class HybridSMCScreener:
             mtf_info = self.mtf_check(pair, tf)
             main_trad_dir = "BUY" if trad["score"] > 0 else "SELL" if trad["score"] < 0 else "NEUTRAL"
             htf_dir = mtf_info.get("htf_dir")
-            align_score = mtf_info.get("align_score", 0)
             if htf_dir is not None and htf_dir != "NEUTRAL":
                 aligned = (htf_dir == main_trad_dir)
                 if not aligned:
                     return {"pair": pair, "status": "FILTERED", "signal": "HOLD",
                             "reason": f"MTF not aligned (main {main_trad_dir} vs {mtf_info.get('htf')} {htf_dir})",
                             "price": cp, "adx": adx_val, "rsi": rsi_val, "tf": tf,
-                            "mtf": mtf_info}
+                            "mtf": mtf_info, "news": news_info}
 
         # ── SMC ─────────────────────────────────────────────────────────────
         smc_sc  = 0
         smc_rs  = []
         smc_det = {}
 
-        # Premium/Discount Zone
         pdz = premium_discount(df, 140)
         if pdz:
             smc_det["pdz"] = pdz
@@ -431,7 +588,6 @@ class HybridSMCScreener:
             elif "PREMIUM" in pdz["zone"]:
                 smc_sc -= 2; smc_rs.append(f"PDZ: {pdz['zone']} → SELL zone")
 
-        # BOS
         if bos_on:
             bos = self.smc_bos(df)
             smc_det["bos"] = bos
@@ -440,7 +596,6 @@ class HybridSMCScreener:
             if bos["bear"]:
                 smc_sc -= 3; smc_rs.append(f"BOS Bearish (broke {bos.get('level', ''):.5g})")
 
-        # Liquidity sweep
         if liq_on:
             liq = self.smc_liquidity(df)
             smc_det["liq"] = liq
@@ -449,7 +604,6 @@ class HybridSMCScreener:
             if liq["swept_h"]:
                 smc_sc -= 2; smc_rs.append("Swept Highs (bearish)")
 
-        # FVG
         if fvg_on:
             fvg = self.smc_fvg(df)
             smc_det["fvg"] = fvg
@@ -462,7 +616,6 @@ class HybridSMCScreener:
                 if abs(cp - nr["mid"]) <= max(atr_val*0.6, cp*0.001):
                     smc_sc -= 2; smc_rs.append("Near Bearish FVG")
 
-        # Order Block
         if ob_on:
             ob = self.smc_order_block(df)
             smc_det["ob"] = ob
@@ -474,18 +627,16 @@ class HybridSMCScreener:
         total = trad["score"] + smc_sc
         confluence = abs(total)
 
-        # Below min confluence → HOLD (visible but no trade)
         if confluence < min_confluence:
             return {"pair": pair, "status": "HOLD", "signal": "HOLD",
                     "price": cp, "adx": adx_val, "rsi": rsi_val, "tf": tf,
                     "trad": trad, "smc_sc": smc_sc, "smc_rs": smc_rs,
                     "smc_det": smc_det, "total": total, "confluence": confluence,
-                    "mtf": mtf_info,
+                    "mtf": mtf_info, "news": news_info,
                     "note": f"Confluence {confluence} < {min_confluence}"}
 
         direction = "BUY" if total > 0 else "SELL"
 
-        # Entry using OB mid if inside OB
         entry = cp
         entry_src = "Market price"
         if direction == "BUY" and smc_det.get("ob", {}).get("bull"):
@@ -531,7 +682,7 @@ class HybridSMCScreener:
             "atr": atr_val, "adx": adx_val, "rsi": rsi_val,
             "trad": trad, "smc_sc": smc_sc, "smc_rs": smc_rs,
             "smc_det": smc_det, "total": total, "confluence": confluence,
-            "mtf": mtf_info,
+            "mtf": mtf_info, "news": news_info,
         }
 
 
@@ -560,6 +711,41 @@ with st.sidebar:
     adx_min    = st.slider("ADX minimum", 10, 40, 20) if enable_adx else 0
 
     st.markdown("---")
+    st.subheader("📰 News Filter")
+    news_enabled = st.checkbox("Enable news protection", value=True,
+        help="Block trading sinyal saat ada high-impact news")
+    
+    if news_enabled:
+        news_buffer = st.slider(
+            "Block before news (minutes)", 
+            15, 120, 30,
+            help="Berapa menit sebelum news dimulai akan block sinyal"
+        )
+    else:
+        news_buffer = 30
+    
+    # Live News Preview
+    if news_enabled:
+        st.markdown("**📅 Upcoming News:**")
+        nf = NewsFilter()
+        upcoming_news = nf.get_all_upcoming()
+        
+        if upcoming_news:
+            displayed = 0
+            for n in upcoming_news[:5]:
+                if n['status'] == 'IMMINENT':
+                    st.error(f"🚨 **{n['currency']}** - {n['title'][:35]}...\n⏰ in **{n['minutes']}m**")
+                    displayed += 1
+                elif n['status'] == 'WARNING':
+                    st.warning(f"⚠️ **{n['currency']}** - {n['title'][:35]}...\n⏰ in {n['minutes']}m")
+                    displayed += 1
+                elif displayed < 3:
+                    st.info(f"📅 **{n['currency']}** - {n['title'][:30]}... ({n['minutes']}m)")
+                    displayed += 1
+        else:
+            st.success("✅ No major news in 4 hours")
+
+    st.markdown("---")
     st.subheader("🧠 SMC Components")
     ob_on  = st.checkbox("Order Block (OB)",         value=True)
     fvg_on = st.checkbox("Fair Value Gap (FVG)",     value=True)
@@ -572,7 +758,8 @@ with st.sidebar:
         help="Naikkan untuk sinyal lebih sedikit tapi lebih kuat")
     entry_mode = st.radio("Entry zone", ["Conservative","Moderate","Aggressive"], index=1)
 
-    st.caption("Tips: Kalau sinyal kosong → turunkan Min confluence, atau matikan MTF/ADX, atau pakai TF lebih besar.")
+    st.caption("💡 Tip: Kalau sinyal kosong → turunkan Min confluence, atau matikan filter, atau pakai TF lebih besar.")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RENDER CARD
@@ -589,11 +776,37 @@ def render_card(r):
     is_cr = any(x in r["pair"] for x in ["BTC","ETH","SOL","BNB"])
     has_smc = bool(r.get("smc_rs"))
     has_mtf = r.get("mtf") and r["mtf"].get("htf_dir")
+    has_news = r.get("news") is not None
 
     badges = ""
-    if is_cr:  badges += "<span class='badge badge-crypto'>CRYPTO</span>"
+    if is_cr:   badges += "<span class='badge badge-crypto'>CRYPTO</span>"
     if has_smc: badges += "<span class='badge badge-smc'>SMC</span>"
     if has_mtf: badges += f"<span class='badge badge-mtf'>MTF {r['mtf'].get('htf','')}</span>"
+    if has_news and r['news']['status'] in ['IMMINENT', 'WARNING']:
+        badges += "<span class='badge badge-news'>📰 NEWS</span>"
+
+    # ═══ NEWS WARNING BOX ═══════════════════════════════════════════════════
+    news_html = ""
+    if has_news:
+        n = r['news']
+        if n['status'] == 'IMMINENT':
+            news_html = f"""
+            <div class="news-critical">
+                🚨 <b>DO NOT TRADE</b> — {n['title']}<br/>
+                ⏰ News in <b>{n['minutes']} minutes</b> at {n['time_str']}
+            </div>"""
+        elif n['status'] == 'WARNING':
+            news_html = f"""
+            <div class="news-warning">
+                ⚠️ <b>CAUTION</b> — {n['title']}<br/>
+                ⏰ in {n['minutes']} minutes at {n['time_str']}<br/>
+                💡 Consider: Wait or reduce position size to 0.5%
+            </div>"""
+        elif n['status'] == 'UPCOMING':
+            news_html = f"""
+            <div class="news-info">
+                📰 Upcoming: {n['title']} at {n['time_str']}
+            </div>"""
 
     entry_html = ""
     if r.get("entry") is not None and r.get("sl") is not None:
@@ -635,6 +848,7 @@ def render_card(r):
         TF: {r.get('tf','—')} | Confluence: <b>{conf}</b> | Score: <b>{total:+}</b>
         | ADX: {adx_v:.1f} | RSI: {rsi_v:.1f}
       </div>
+      {news_html}
       {entry_html}
       <div class="grid2">
         <div class="box">
@@ -658,14 +872,15 @@ def render_card(r):
 pairs = forex_pairs + metal_pairs + crypto_pairs
 screener = HybridSMCScreener()
 
-if st.button("🚀 SCAN NOW — Hybrid SMC"):
+if st.button("🚀 SCAN NOW — Hybrid SMC Pro"):
     if not pairs:
         st.warning("Pilih minimal 1 pair di sidebar.")
         st.stop()
 
     st.write(f"**Scan:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | "
              f"TF: **{tf}** | MTF: **{enable_mtf}** | "
-             f"ADX ≥ **{adx_min}** | Min confluence: **{min_conf}**")
+             f"ADX ≥ **{adx_min}** | Min confluence: **{min_conf}** | "
+             f"News filter: **{news_enabled}** ({news_buffer}m buffer)")
 
     prog   = st.progress(0)
     status = st.empty()
@@ -678,6 +893,7 @@ if st.button("🚀 SCAN NOW — Hybrid SMC"):
             enable_mtf=enable_mtf, enable_adx=enable_adx, adx_min=float(adx_min),
             min_confluence=int(min_conf), entry_mode=entry_mode,
             ob_on=ob_on, fvg_on=fvg_on, bos_on=bos_on, liq_on=liq_on,
+            news_filter_on=news_enabled, news_buffer_mins=news_buffer,
         )
         results.append(res)
         prog.progress(i / len(pairs))
@@ -686,21 +902,23 @@ if st.button("🚀 SCAN NOW — Hybrid SMC"):
     status.empty()
     prog.empty()
 
-    trades   = [r for r in results if r.get("status") == "TRADE"]
-    holds    = [r for r in results if r.get("status") == "HOLD"]
-    filtered = [r for r in results if r.get("status") == "FILTERED"]
-    nodata   = [r for r in results if r.get("status") == "NO_DATA"]
-    buys     = [r for r in trades if r.get("direction") == "BUY"]
-    sells    = [r for r in trades if r.get("direction") == "SELL"]
+    trades      = [r for r in results if r.get("status") == "TRADE"]
+    holds       = [r for r in results if r.get("status") == "HOLD"]
+    filtered    = [r for r in results if r.get("status") == "FILTERED"]
+    news_blocks = [r for r in results if r.get("status") == "NEWS_BLOCK"]
+    nodata      = [r for r in results if r.get("status") == "NO_DATA"]
+    buys        = [r for r in trades if r.get("direction") == "BUY"]
+    sells       = [r for r in trades if r.get("direction") == "SELL"]
 
     # ── Dashboard metrics ──
     st.markdown("---")
-    c1,c2,c3,c4,c5 = st.columns(5)
+    c1,c2,c3,c4,c5,c6 = st.columns(6)
     c1.metric("Total",    len(results))
     c2.metric("🟢 Buy",   len(buys))
     c3.metric("🔴 Sell",  len(sells))
     c4.metric("🟡 Hold",  len(holds))
-    c5.metric("⛔ Filtered/ND", len(filtered)+len(nodata))
+    c5.metric("📰 News Block", len(news_blocks))
+    c6.metric("⛔ Filtered", len(filtered)+len(nodata))
 
     # ── Tradeable ──
     st.markdown("---")
@@ -711,9 +929,22 @@ if st.button("🚀 SCAN NOW — Hybrid SMC"):
     else:
         st.warning(
             "⚠️ Tidak ada sinyal BUY/SELL yang lolos saat ini.\n\n"
-            "**Coba:** turunkan Min confluence slider | matikan MTF/ADX sementara | "
+            "**Coba:** turunkan Min confluence slider | matikan MTF/ADX/News filter | "
             "pilih TF lebih besar (1h/4h/1d) | tambahkan lebih banyak pair."
         )
+
+    # ── News Blocked ──
+    if news_blocks:
+        st.markdown("---")
+        with st.expander(f"📰 NEWS BLOCKED ({len(news_blocks)}) — High-impact news incoming"):
+            for r in news_blocks:
+                n = r.get('news', {})
+                st.markdown(f"""
+                **{r['pair']}** 🚨 {r.get('reason', 'News block')}<br/>
+                Current price: {r.get('price'):.5g} | ADX: {r.get('adx',0):.1f} | RSI: {r.get('rsi',50):.1f}<br/>
+                <small>💡 Signal will be available 30 minutes after news at {n.get('time_str', 'N/A')}</small>
+                """, unsafe_allow_html=True)
+                st.markdown("---")
 
     # ── Hold ──
     st.markdown("---")
@@ -733,6 +964,38 @@ if st.button("🚀 SCAN NOW — Hybrid SMC"):
             st.write(f"**{r['pair']}** — coba TF lebih besar (1h/4h/1d).")
 
     st.markdown("---")
+    
+    # ══════════════════════════════════════════════════════════════════════════
+    # NEWS IMPACT GUIDE
+    # ══════════════════════════════════════════════════════════════════════════
+    
+    with st.expander("📊 News Impact Guide — Which News Matters?"):
+        st.markdown("""
+        | News Event | Pairs Affected | Avg Movement | Priority | Action |
+        |------------|----------------|--------------|----------|--------|
+        | 🔴 **NFP (Non-Farm Payroll)** | All USD pairs | 80-150 pips | **CRITICAL** | Close all positions 1h before |
+        | 🔴 **FOMC Interest Rate** | All USD pairs | 100-200 pips | **CRITICAL** | Close all positions 1h before |
+        | 🔴 **ECB Interest Rate** | EUR pairs | 70-120 pips | **CRITICAL** | Close all positions 1h before |
+        | 🔴 **BoE Interest Rate** | GBP pairs | 70-120 pips | **CRITICAL** | Close all positions 1h before |
+        | 🟠 **CPI (Inflation)** | Local currency | 50-100 pips | **HIGH** | No new entries 30min before |
+        | 🟠 **GDP** | Local currency | 40-80 pips | **HIGH** | No new entries 30min before |
+        | 🟠 **Unemployment Rate** | Local currency | 40-70 pips | **HIGH** | No new entries 30min before |
+        | 🟡 **PMI Manufacturing** | Local currency | 20-50 pips | **MEDIUM** | Reduce position size |
+        | 🟡 **Retail Sales** | Local currency | 15-40 pips | **MEDIUM** | Reduce position size |
+        | 🟢 **Trade Balance** | Local currency | 10-30 pips | **LOW** | Trade as normal (optional tighter SL) |
+        
+        **Recommended Buffer Times:**
+        - 🔴 **CRITICAL (NFP, Interest Rates)**: Block 60-90 minutes before
+        - 🟠 **HIGH (CPI, GDP)**: Block 30-45 minutes before
+        - 🟡 **MEDIUM (PMI)**: Block 15-30 minutes before
+        - 🟢 **LOW**: No block needed (or 10-15 min)
+        
+        **Post-News Trading:**
+        - Wait **at least 30 minutes** after major news
+        - Let volatility settle before re-entering
+        - First 5-10 minutes often has whipsaws
+        """)
+    
     st.info("""
 **Catatan SMC (Smart Money Concepts):**
 - **OB (Order Block):** Last opposing candle sebelum impulse move — area entry institusional.
@@ -741,9 +1004,11 @@ if st.button("🚀 SCAN NOW — Hybrid SMC"):
 - **Liquidity sweep:** Smart money sering "sapu" equal highs/lows sebelum reversal.
 - **PDZ (Premium/Discount):** Beli di discount (<50%), jual di premium (>50%) sesuai range.
 
+**📰 News Filter:** Melindungi Anda dari volatilitas tak terduga akibat high-impact news seperti NFP, FOMC, ECB rate decision.
+
 Tool ini bersifat *heuristic* — gunakan sebagai *watchlist screener*, lalu konfirmasi secara manual di chart sebelum entry.
 """)
 
 # footer
 st.markdown("---")
-st.caption("Hybrid SMC Screener v4.0 | Data: Yahoo Finance | Educational purposes only.")
+st.caption("Hybrid SMC Screener Pro v5.0 | Data: Yahoo Finance + Forex Factory | Educational purposes only.")
