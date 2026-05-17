@@ -6,8 +6,8 @@ from datetime import datetime
 import time
 
 st.set_page_config(
-    page_title="Pro Forex & Crypto Screener",
-    page_icon="📊",
+    page_title="Hybrid SMC Screener",
+    page_icon="🧠",
     layout="wide"
 )
 
@@ -26,6 +26,7 @@ st.markdown("""
     }
     .stButton>button:hover {
         background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        transform: scale(1.02);
     }
     .buy-signal {
         background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -33,7 +34,7 @@ st.markdown("""
         padding: 25px;
         border-radius: 15px;
         margin: 15px 0;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.3);
     }
     .sell-signal {
         background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
@@ -41,7 +42,7 @@ st.markdown("""
         padding: 25px;
         border-radius: 15px;
         margin: 15px 0;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.3);
     }
     .hold-signal {
         background: linear-gradient(135deg, #a8a8a8 0%, #d0d0d0 100%);
@@ -49,23 +50,20 @@ st.markdown("""
         padding: 20px;
         border-radius: 15px;
         margin: 10px 0;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
-    .crypto-badge {
-        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-        padding: 5px 10px;
-        border-radius: 5px;
-        font-size: 0.8em;
-        margin-left: 10px;
-        color: white;
+    .smc-box {
+        background: rgba(255,255,255,0.15);
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        border-left: 4px solid #ffd700;
     }
-    .mtf-badge {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-        padding: 5px 10px;
-        border-radius: 5px;
-        font-size: 0.8em;
-        margin-left: 10px;
-        color: white;
+    .traditional-box {
+        background: rgba(255,255,255,0.15);
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        border-left: 4px solid #00f2fe;
     }
     .entry-zone {
         background: rgba(255,255,255,0.2);
@@ -74,12 +72,40 @@ st.markdown("""
         margin: 10px 0;
         border-left: 4px solid #fff;
     }
-    .mtf-box {
-        background: rgba(255,255,255,0.15);
-        padding: 12px;
+    .smc-badge {
+        background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+        padding: 5px 12px;
+        border-radius: 5px;
+        font-size: 0.85em;
+        font-weight: bold;
+        color: #333;
+        margin-left: 10px;
+    }
+    .institutional-badge {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 5px 12px;
+        border-radius: 5px;
+        font-size: 0.85em;
+        font-weight: bold;
+        color: white;
+        margin-left: 10px;
+    }
+    .confluence-meter {
+        background: rgba(255,255,255,0.1);
+        padding: 10px;
         border-radius: 8px;
-        margin: 8px 0;
-        border-left: 3px solid #00f2fe;
+        margin: 10px 0;
+    }
+    .progress-bar {
+        background: #ddd;
+        border-radius: 10px;
+        height: 20px;
+        overflow: hidden;
+    }
+    .progress-fill {
+        background: linear-gradient(90deg, #11998e 0%, #38ef7d 100%);
+        height: 100%;
+        transition: width 0.3s;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -92,13 +118,14 @@ st.markdown("""
             color: white;
             margin-bottom: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);'>
-    <h1 style='margin: 0; font-size: 2.5em;'>🔍 PROFESSIONAL TRADING SCREENER</h1>
-    <p style='margin: 10px 0 0 0; font-size: 1.2em;'>Multi-Timeframe | Support & Resistance | Trend Filter</p>
+    <h1 style='margin: 0; font-size: 2.5em;'>🧠 HYBRID SMC SCREENER</h1>
+    <p style='margin: 10px 0 0 0; font-size: 1.3em;'>Smart Money Concepts + Traditional Indicators</p>
+    <p style='margin: 5px 0 0 0; font-size: 0.95em; opacity: 0.95;'>Order Blocks • Fair Value Gaps • Break of Structure • Liquidity Zones</p>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("⚙️ Configuration")
     
     st.subheader("📊 Select Pairs")
     
@@ -116,38 +143,42 @@ with st.sidebar:
     
     crypto_pairs = st.multiselect(
         "₿ Crypto",
-        ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'XRP/USD', 'ADA/USD'],
+        ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD'],
         default=['BTC/USD', 'ETH/USD']
     )
     
     st.markdown("---")
     
     main_interval = st.selectbox(
-        "⏰ Main Timeframe",
+        "⏰ Timeframe",
         ['5m', '15m', '1h', '4h', '1d'],
         index=2
     )
     
     st.markdown("---")
-    st.subheader("🎯 Filters")
+    st.subheader("🧠 SMC Settings")
+    
+    enable_ob = st.checkbox("Order Blocks", value=True, help="Detect institutional order blocks")
+    enable_fvg = st.checkbox("Fair Value Gaps", value=True, help="Identify imbalances")
+    enable_bos = st.checkbox("Break of Structure", value=True, help="Market structure shifts")
+    enable_liquidity = st.checkbox("Liquidity Zones", value=True, help="Equal highs/lows")
+    
+    st.markdown("---")
+    st.subheader("📊 Traditional Filters")
     
     enable_mtf = st.checkbox("Multi-Timeframe", value=True)
-    if enable_mtf:
-        mtf_strict = st.radio(
-            "MTF Level",
-            ["Strict", "Moderate", "Loose"],
-            index=1
-        )
-    
-    enable_adx = st.checkbox("ADX Trend Filter", value=True)
+    enable_adx = st.checkbox("ADX Filter", value=True)
     if enable_adx:
-        adx_threshold = st.slider("Min ADX", 15, 40, 25)
+        adx_threshold = st.slider("Min ADX", 15, 40, 20)
     
-    enable_sr = st.checkbox("S/R Detection", value=True)
+    st.markdown("---")
+    st.subheader("🎯 Signal Settings")
+    
+    min_confluence = st.slider("Minimum Confluence", 5, 20, 12, help="Higher = fewer but stronger signals")
     
     entry_strategy = st.radio(
         "Entry Type",
-        ["Aggressive", "Moderate", "Conservative"],
+        ["Conservative", "Moderate", "Aggressive"],
         index=1
     )
     
@@ -155,20 +186,19 @@ with st.sidebar:
     total = len(forex_pairs) + len(metal_pairs) + len(crypto_pairs)
     st.metric("Total Pairs", total)
     
-    st.info("💡 **Tip:** If no signals, try:\n- Lower ADX to 20\n- Use 'Loose' MTF\n- Select more pairs")
+    st.info("🧠 **SMC Mode Active**\nFollowing institutional money flow")
 
-class ProfessionalScreener:
+class HybridSMCScreener:
     def __init__(self):
         self.ticker_map = {
             'EUR/USD': 'EURUSD=X', 'GBP/USD': 'GBPUSD=X', 'USD/JPY': 'USDJPY=X',
             'AUD/USD': 'AUDUSD=X', 'USD/CAD': 'USDCAD=X', 'NZD/USD': 'NZDUSD=X',
             'USD/CHF': 'USDCHF=X', 'XAU/USD': 'GC=F', 'XAG/USD': 'SI=F',
-            'BTC/USD': 'BTC-USD', 'ETH/USD': 'ETH-USD', 'SOL/USD': 'SOL-USD',
-            'BNB/USD': 'BNB-USD', 'XRP/USD': 'XRP-USD', 'ADA/USD': 'ADA-USD'
+            'BTC/USD': 'BTC-USD', 'ETH/USD': 'ETH-USD', 'SOL/USD': 'SOL-USD', 'BNB/USD': 'BNB-USD'
         }
     
     def is_crypto(self, pair):
-        return any(c in pair for c in ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA'])
+        return any(c in pair for c in ['BTC', 'ETH', 'SOL', 'BNB'])
     
     def fetch_data(self, pair, interval='1h'):
         try:
@@ -188,13 +218,15 @@ class ProfessionalScreener:
                 'high': data['High'].values.flatten() if hasattr(data['High'].values, 'flatten') else data['High'].values,
                 'low': data['Low'].values.flatten() if hasattr(data['Low'].values, 'flatten') else data['Low'].values,
                 'close': data['Close'].values.flatten() if hasattr(data['Close'].values, 'flatten') else data['Close'].values,
+                'volume': data['Volume'].values.flatten() if 'Volume' in data.columns else [0]*len(data)
             })
             
             return df.dropna().reset_index(drop=True)
         except:
             return None
     
-    def calculate_indicators(self, df):
+    def calculate_traditional_indicators(self, df):
+        """Traditional technical indicators"""
         if df is None or len(df) < 50:
             return None
         
@@ -206,7 +238,7 @@ class ProfessionalScreener:
             rs = gain / loss
             df['rsi'] = 100 - (100 / (1 + rs))
             
-            # MA
+            # Moving Averages
             df['ma_20'] = df['close'].rolling(window=20).mean()
             df['ma_50'] = df['close'].rolling(window=50).mean()
             df['ema_12'] = df['close'].ewm(span=12, adjust=False).mean()
@@ -240,400 +272,522 @@ class ProfessionalScreener:
         except:
             return None
     
-    def calculate_signal_score(self, df):
-        if df is None or len(df) < 50:
-            return 0
-        
-        latest = df.iloc[-1]
-        score = 0
-        
-        if latest['rsi'] < 30:
-            score += 2
-        elif latest['rsi'] > 70:
-            score -= 2
-        
-        if latest['close'] > latest['ma_20'] > latest['ma_50']:
-            score += 2
-        elif latest['close'] < latest['ma_20'] < latest['ma_50']:
-            score -= 2
-        
-        if latest['macd'] > latest['signal_line']:
-            score += 1
-        else:
-            score -= 1
-        
-        return score
-    
-    def get_timeframe_hierarchy(self, main_tf):
-        hierarchy = {
-            '5m': ['15m', '1h'],
-            '15m': ['1h', '4h'],
-            '1h': ['4h', '1d'],
-            '4h': ['1d'],
-            '1d': []
-        }
-        return hierarchy.get(main_tf, [])
-    
-    def multi_timeframe_analysis(self, pair, main_tf):
+    def detect_order_blocks(self, df, lookback=20):
+        """Detect Order Blocks (OB) - SMC Concept"""
         try:
-            higher_tfs = self.get_timeframe_hierarchy(main_tf)
-            
-            mtf_results = {
-                'main_tf': main_tf,
-                'main_score': 0,
-                'main_dir': 'NEUTRAL',
-                'higher_tf_signals': [],
-                'alignment': 0,
-                'confirmed': False
+            order_blocks = {
+                'bullish_ob': [],
+                'bearish_ob': []
             }
             
-            # Main TF
-            df_main = self.fetch_data(pair, main_tf)
-            if df_main is not None and len(df_main) >= 50:
-                df_main = self.calculate_indicators(df_main)
-                if df_main is not None:
-                    score = self.calculate_signal_score(df_main)
-                    mtf_results['main_score'] = score
-                    mtf_results['main_dir'] = 'BUY' if score > 0 else 'SELL' if score < 0 else 'NEUTRAL'
+            recent_data = df.tail(lookback)
             
-            # Higher TFs
-            for tf in higher_tfs:
-                df_h = self.fetch_data(pair, tf)
-                if df_h is not None and len(df_h) >= 50:
-                    df_h = self.calculate_indicators(df_h)
-                    if df_h is not None:
-                        score = self.calculate_signal_score(df_h)
-                        direction = 'BUY' if score > 0 else 'SELL' if score < 0 else 'NEUTRAL'
-                        mtf_results['higher_tf_signals'].append({
-                            'tf': tf,
-                            'dir': direction,
-                            'score': score
+            for i in range(1, len(recent_data) - 1):
+                current = recent_data.iloc[i]
+                prev = recent_data.iloc[i-1]
+                next_candle = recent_data.iloc[i+1]
+                
+                # Bullish Order Block: Last down candle before strong up move
+                if (current['close'] < current['open'] and  # Bearish candle
+                    next_candle['close'] > next_candle['open'] and  # Next is bullish
+                    next_candle['close'] > current['high']):  # Strong move up
+                    
+                    order_blocks['bullish_ob'].append({
+                        'price_top': current['high'],
+                        'price_bottom': current['low'],
+                        'price_mid': (current['high'] + current['low']) / 2,
+                        'timestamp': current['timestamp'],
+                        'strength': (next_candle['close'] - current['high']) / current['high']
+                    })
+                
+                # Bearish Order Block: Last up candle before strong down move
+                if (current['close'] > current['open'] and  # Bullish candle
+                    next_candle['close'] < next_candle['open'] and  # Next is bearish
+                    next_candle['close'] < current['low']):  # Strong move down
+                    
+                    order_blocks['bearish_ob'].append({
+                        'price_top': current['high'],
+                        'price_bottom': current['low'],
+                        'price_mid': (current['high'] + current['low']) / 2,
+                        'timestamp': current['timestamp'],
+                        'strength': (current['low'] - next_candle['close']) / current['low']
+                    })
+            
+            # Get most recent and strongest OBs
+            if order_blocks['bullish_ob']:
+                order_blocks['bullish_ob'] = sorted(order_blocks['bullish_ob'], 
+                                                    key=lambda x: x['strength'], reverse=True)[:3]
+            if order_blocks['bearish_ob']:
+                order_blocks['bearish_ob'] = sorted(order_blocks['bearish_ob'], 
+                                                     key=lambda x: x['strength'], reverse=True)[:3]
+            
+            return order_blocks
+        except:
+            return {'bullish_ob': [], 'bearish_ob': []}
+    
+    def detect_fair_value_gaps(self, df, lookback=20):
+        """Detect Fair Value Gaps (FVG) - Imbalances"""
+        try:
+            fvgs = {
+                'bullish_fvg': [],
+                'bearish_fvg': []
+            }
+            
+            recent_data = df.tail(lookback)
+            
+            for i in range(1, len(recent_data) - 1):
+                candle1 = recent_data.iloc[i-1]
+                candle2 = recent_data.iloc[i]
+                candle3 = recent_data.iloc[i+1]
+                
+                # Bullish FVG: Gap between candle1 high and candle3 low
+                if candle3['low'] > candle1['high']:
+                    gap_size = candle3['low'] - candle1['high']
+                    if gap_size > 0:
+                        fvgs['bullish_fvg'].append({
+                            'top': candle3['low'],
+                            'bottom': candle1['high'],
+                            'mid': (candle3['low'] + candle1['high']) / 2,
+                            'size': gap_size,
+                            'timestamp': candle2['timestamp']
+                        })
+                
+                # Bearish FVG: Gap between candle1 low and candle3 high
+                if candle3['high'] < candle1['low']:
+                    gap_size = candle1['low'] - candle3['high']
+                    if gap_size > 0:
+                        fvgs['bearish_fvg'].append({
+                            'top': candle1['low'],
+                            'bottom': candle3['high'],
+                            'mid': (candle1['low'] + candle3['high']) / 2,
+                            'size': gap_size,
+                            'timestamp': candle2['timestamp']
                         })
             
-            # Calculate alignment
-            if mtf_results['main_dir'] != 'NEUTRAL':
-                aligned = sum(1 for s in mtf_results['higher_tf_signals'] if s['dir'] == mtf_results['main_dir'])
-                total = len(mtf_results['higher_tf_signals'])
-                if total > 0:
-                    mtf_results['alignment'] = (aligned / total) * 100
-                    mtf_results['confirmed'] = mtf_results['alignment'] >= 66
+            # Filter unmitigated FVGs (price hasn't filled them yet)
+            current_price = df.iloc[-1]['close']
             
-            return mtf_results
+            fvgs['bullish_fvg'] = [fvg for fvg in fvgs['bullish_fvg'] 
+                                   if current_price < fvg['top']][:3]
+            fvgs['bearish_fvg'] = [fvg for fvg in fvgs['bearish_fvg'] 
+                                    if current_price > fvg['bottom']][:3]
+            
+            return fvgs
+        except:
+            return {'bullish_fvg': [], 'bearish_fvg': []}
+    
+    def detect_break_of_structure(self, df, lookback=30):
+        """Detect Break of Structure (BOS) and Change of Character (CHoCH)"""
+        try:
+            recent_data = df.tail(lookback)
+            
+            # Find swing highs and lows
+            highs = []
+            lows = []
+            
+            for i in range(2, len(recent_data) - 2):
+                # Swing High
+                if (recent_data.iloc[i]['high'] > recent_data.iloc[i-1]['high'] and
+                    recent_data.iloc[i]['high'] > recent_data.iloc[i-2]['high'] and
+                    recent_data.iloc[i]['high'] > recent_data.iloc[i+1]['high'] and
+                    recent_data.iloc[i]['high'] > recent_data.iloc[i+2]['high']):
+                    highs.append({
+                        'price': recent_data.iloc[i]['high'],
+                        'index': i,
+                        'timestamp': recent_data.iloc[i]['timestamp']
+                    })
+                
+                # Swing Low
+                if (recent_data.iloc[i]['low'] < recent_data.iloc[i-1]['low'] and
+                    recent_data.iloc[i]['low'] < recent_data.iloc[i-2]['low'] and
+                    recent_data.iloc[i]['low'] < recent_data.iloc[i+1]['low'] and
+                    recent_data.iloc[i]['low'] < recent_data.iloc[i+2]['low']):
+                    lows.append({
+                        'price': recent_data.iloc[i]['low'],
+                        'index': i,
+                        'timestamp': recent_data.iloc[i]['timestamp']
+                    })
+            
+            structure = {
+                'bos_bullish': False,
+                'bos_bearish': False,
+                'trend': 'RANGING',
+                'last_high': highs[-1]['price'] if highs else None,
+                'last_low': lows[-1]['price'] if lows else None
+            }
+            
+            current_price = recent_data.iloc[-1]['close']
+            
+            # Bullish BOS: Price breaks above recent high
+            if highs and current_price > highs[-1]['price']:
+                structure['bos_bullish'] = True
+                structure['trend'] = 'BULLISH'
+                structure['bos_level'] = highs[-1]['price']
+            
+            # Bearish BOS: Price breaks below recent low
+            if lows and current_price < lows[-1]['price']:
+                structure['bos_bearish'] = True
+                structure['trend'] = 'BEARISH'
+                structure['bos_level'] = lows[-1]['price']
+            
+            # Determine market structure
+            if len(highs) >= 2 and len(lows) >= 2:
+                higher_highs = highs[-1]['price'] > highs[-2]['price']
+                higher_lows = lows[-1]['price'] > lows[-2]['price']
+                lower_highs = highs[-1]['price'] < highs[-2]['price']
+                lower_lows = lows[-1]['price'] < lows[-2]['price']
+                
+                if higher_highs and higher_lows:
+                    structure['trend'] = 'BULLISH'
+                elif lower_highs and lower_lows:
+                    structure['trend'] = 'BEARISH'
+            
+            return structure
+        except:
+            return {'bos_bullish': False, 'bos_bearish': False, 'trend': 'RANGING'}
+    
+    def detect_liquidity_zones(self, df, lookback=50):
+        """Detect liquidity zones (Equal Highs/Lows)"""
+        try:
+            recent_data = df.tail(lookback)
+            
+            liquidity = {
+                'equal_highs': [],
+                'equal_lows': [],
+                'swept_highs': False,
+                'swept_lows': False
+            }
+            
+            # Find equal highs
+            highs = recent_data['high'].values
+            for i in range(len(highs) - 5):
+                for j in range(i+1, min(i+10, len(highs))):
+                    diff_pct = abs(highs[i] - highs[j]) / highs[i]
+                    if diff_pct < 0.001:  # Within 0.1%
+                        liquidity['equal_highs'].append({
+                            'price': (highs[i] + highs[j]) / 2,
+                            'count': 2
+                        })
+            
+            # Find equal lows
+            lows = recent_data['low'].values
+            for i in range(len(lows) - 5):
+                for j in range(i+1, min(i+10, len(lows))):
+                    diff_pct = abs(lows[i] - lows[j]) / lows[i]
+                    if diff_pct < 0.001:  # Within 0.1%
+                        liquidity['equal_lows'].append({
+                            'price': (lows[i] + lows[j]) / 2,
+                            'count': 2
+                        })
+            
+            # Check if liquidity was swept
+            current_high = recent_data.iloc[-1]['high']
+            current_low = recent_data.iloc[-1]['low']
+            
+            if liquidity['equal_highs']:
+                highest_eq = max([eq['price'] for eq in liquidity['equal_highs']])
+                if current_high > highest_eq:
+                    liquidity['swept_highs'] = True
+            
+            if liquidity['equal_lows']:
+                lowest_eq = min([eq['price'] for eq in liquidity['equal_lows']])
+                if current_low < lowest_eq:
+                    liquidity['swept_lows'] = True
+            
+            return liquidity
+        except:
+            return {'equal_highs': [], 'equal_lows': [], 'swept_highs': False, 'swept_lows': False}
+    
+    def calculate_premium_discount(self, df):
+        """Calculate if price is in premium or discount zone (Fibonacci)"""
+        try:
+            recent_data = df.tail(50)
+            
+            high_50 = recent_data['high'].max()
+            low_50 = recent_data['low'].min()
+            current_price = df.iloc[-1]['close']
+            
+            # Calculate Fibonacci levels
+            range_size = high_50 - low_50
+            fib_50 = low_50 + (range_size * 0.5)
+            fib_618 = low_50 + (range_size * 0.618)
+            fib_382 = low_50 + (range_size * 0.382)
+            
+            position = (current_price - low_50) / range_size
+            
+            zone_info = {
+                'high': high_50,
+                'low': low_50,
+                'fib_50': fib_50,
+                'fib_618': fib_618,
+                'fib_382': fib_382,
+                'position_pct': position * 100
+            }
+            
+            if position > 0.618:
+                zone_info['zone'] = 'PREMIUM'
+                zone_info['bias'] = 'SELL'
+            elif position < 0.382:
+                zone_info['zone'] = 'DISCOUNT'
+                zone_info['bias'] = 'BUY'
+            else:
+                zone_info['zone'] = 'EQUILIBRIUM'
+                zone_info['bias'] = 'NEUTRAL'
+            
+            return zone_info
         except:
             return None
     
-    def generate_signal(self, df, pair, entry_strategy, enable_adx, adx_threshold, enable_sr, enable_mtf, mtf_strict, main_tf):
-        if df is None or len(df) < 50:
-            return None
+    def generate_smc_analysis(self, df, enable_ob, enable_fvg, enable_bos, enable_liquidity):
+        """Complete SMC analysis"""
+        smc = {
+            'order_blocks': None,
+            'fvgs': None,
+            'structure': None,
+            'liquidity': None,
+            'premium_discount': None,
+            'smc_score': 0,
+            'smc_reasons': []
+        }
         
+        try:
+            current_price = df.iloc[-1]['close']
+            
+            # Order Blocks
+            if enable_ob:
+                smc['order_blocks'] = self.detect_order_blocks(df)
+                
+                # Check if price is at bullish OB
+                for ob in smc['order_blocks']['bullish_ob']:
+                    if ob['price_bottom'] <= current_price <= ob['price_top']:
+                        smc['smc_score'] += 3
+                        smc['smc_reasons'].append('🟢 At Bullish Order Block')
+                        break
+                
+                # Check if price is at bearish OB
+                for ob in smc['order_blocks']['bearish_ob']:
+                    if ob['price_bottom'] <= current_price <= ob['price_top']:
+                        smc['smc_score'] -= 3
+                        smc['smc_reasons'].append('🔴 At Bearish Order Block')
+                        break
+            
+            # Fair Value Gaps
+            if enable_fvg:
+                smc['fvgs'] = self.detect_fair_value_gaps(df)
+                
+                # Check if price is near bullish FVG
+                for fvg in smc['fvgs']['bullish_fvg']:
+                    if abs(current_price - fvg['mid']) / current_price < 0.002:
+                        smc['smc_score'] += 2
+                        smc['smc_reasons'].append('🟢 Near Bullish FVG')
+                        break
+                
+                # Check if price is near bearish FVG
+                for fvg in smc['fvgs']['bearish_fvg']:
+                    if abs(current_price - fvg['mid']) / current_price < 0.002:
+                        smc['smc_score'] -= 2
+                        smc['smc_reasons'].append('🔴 Near Bearish FVG')
+                        break
+            
+            # Break of Structure
+            if enable_bos:
+                smc['structure'] = self.detect_break_of_structure(df)
+                
+                if smc['structure']['bos_bullish']:
+                    smc['smc_score'] += 3
+                    smc['smc_reasons'].append('⭐ Bullish BOS')
+                elif smc['structure']['bos_bearish']:
+                    smc['smc_score'] -= 3
+                    smc['smc_reasons'].append('⭐ Bearish BOS')
+                
+                if smc['structure']['trend'] == 'BULLISH':
+                    smc['smc_score'] += 1
+                    smc['smc_reasons'].append('📈 Bullish Structure')
+                elif smc['structure']['trend'] == 'BEARISH':
+                    smc['smc_score'] -= 1
+                    smc['smc_reasons'].append('📉 Bearish Structure')
+            
+            # Liquidity
+            if enable_liquidity:
+                smc['liquidity'] = self.detect_liquidity_zones(df)
+                
+                if smc['liquidity']['swept_lows']:
+                    smc['smc_score'] += 2
+                    smc['smc_reasons'].append('💧 Lows Swept (Bullish)')
+                elif smc['liquidity']['swept_highs']:
+                    smc['smc_score'] -= 2
+                    smc['smc_reasons'].append('💧 Highs Swept (Bearish)')
+            
+            # Premium/Discount
+            smc['premium_discount'] = self.calculate_premium_discount(df)
+            
+            if smc['premium_discount']:
+                if smc['premium_discount']['zone'] == 'DISCOUNT':
+                    smc['smc_score'] += 2
+                    smc['smc_reasons'].append('💎 Discount Zone (Buy)')
+                elif smc['premium_discount']['zone'] == 'PREMIUM':
+                    smc['smc_score'] -= 2
+                    smc['smc_reasons'].append('💎 Premium Zone (Sell)')
+            
+            return smc
+        except:
+            return smc
+    
+    def generate_traditional_score(self, df):
+        """Generate traditional indicators score"""
         try:
             latest = df.iloc[-1]
             prev = df.iloc[-2]
             
-            signal = {
-                'pair': pair,
-                'price': latest['close'],
-                'timestamp': latest['timestamp'],
-                'signal': 'HOLD',
-                'is_crypto': self.is_crypto(pair),
-                'reasons': [],
-                'filters': [],
-                'score': 0,
-                'filter_status': 'PASSED'
-            }
+            trad_score = 0
+            trad_reasons = []
             
-            score = 0
-            reasons = []
-            
-            # Technical analysis
+            # RSI
             if latest['rsi'] < 30:
-                score += 2
-                reasons.append('RSI Oversold')
+                trad_score += 2
+                trad_reasons.append('RSI Oversold')
             elif latest['rsi'] > 70:
-                score -= 2
-                reasons.append('RSI Overbought')
+                trad_score -= 2
+                trad_reasons.append('RSI Overbought')
             
+            # MA Trend
             if latest['close'] > latest['ma_20'] > latest['ma_50']:
-                score += 2
-                reasons.append('Uptrend')
+                trad_score += 2
+                trad_reasons.append('MA Uptrend')
             elif latest['close'] < latest['ma_20'] < latest['ma_50']:
-                score -= 2
-                reasons.append('Downtrend')
+                trad_score -= 2
+                trad_reasons.append('MA Downtrend')
             
+            # MACD
             if latest['macd'] > latest['signal_line'] and prev['macd'] <= prev['signal_line']:
-                score += 3
-                reasons.append('MACD Bullish')
+                trad_score += 3
+                trad_reasons.append('MACD Bullish Cross')
             elif latest['macd'] < latest['signal_line'] and prev['macd'] >= prev['signal_line']:
-                score -= 3
-                reasons.append('MACD Bearish')
+                trad_score -= 3
+                trad_reasons.append('MACD Bearish Cross')
             
-            signal['score'] = score
-            signal['reasons'] = reasons
+            # ADX
+            if latest['adx'] > 25:
+                if latest['close'] > latest['ma_20']:
+                    trad_score += 1
+                else:
+                    trad_score -= 1
+                trad_reasons.append(f"ADX {latest['adx']:.1f} (Trending)")
             
-            # Filters
-            passed_all = True
+            return {
+                'score': trad_score,
+                'reasons': trad_reasons,
+                'rsi': latest['rsi'],
+                'adx': latest['adx'],
+                'macd': latest['macd']
+            }
+        except:
+            return {'score': 0, 'reasons': [], 'rsi': 50, 'adx': 0, 'macd': 0}
+    
+    def generate_hybrid_signal(self, pair, main_tf, enable_ob, enable_fvg, enable_bos, enable_liquidity, enable_adx, adx_threshold, min_confluence, entry_strategy):
+        """Generate hybrid signal combining SMC + Traditional"""
+        try:
+            df = self.fetch_data(pair, main_tf)
+            
+            if df is None or len(df) < 50:
+                return None
+            
+            df = self.calculate_traditional_indicators(df)
+            
+            if df is None:
+                return None
+            
+            # SMC Analysis
+            smc = self.generate_smc_analysis(df, enable_ob, enable_fvg, enable_bos, enable_liquidity)
+            
+            # Traditional Analysis
+            trad = self.generate_traditional_score(df)
             
             # ADX Filter
-            if enable_adx:
-                adx_val = latest['adx']
-                signal['adx'] = adx_val
-                if adx_val < adx_threshold:
-                    passed_all = False
-                    signal['filter_status'] = f'FILTERED (ADX {adx_val:.1f} < {adx_threshold})'
-                else:
-                    signal['filters'].append(f'ADX: {adx_val:.1f}')
-                    if adx_val > 40:
-                        score += 2
+            if enable_adx and trad['adx'] < adx_threshold:
+                return None
             
-            # MTF Filter
-            if enable_mtf and passed_all:
-                mtf = self.multi_timeframe_analysis(pair, main_tf)
-                signal['mtf'] = mtf
-                
-                if mtf:
-                    if mtf_strict == "Strict":
-                        passed_all = mtf['alignment'] == 100
-                    elif mtf_strict == "Moderate":
-                        passed_all = mtf['alignment'] >= 66
-                    
-                    if not passed_all:
-                        signal['filter_status'] = f'FILTERED (MTF {mtf["alignment"]:.0f}%)'
-                    else:
-                        signal['filters'].append(f'MTF: {mtf["alignment"]:.0f}%')
-                        if mtf['confirmed']:
-                            score += 3
+            # Combined Score
+            total_score = smc['smc_score'] + trad['score']
+            confluence = abs(total_score)
             
-            signal['score'] = score
+            # Filter by minimum confluence
+            if confluence < min_confluence:
+                return None
             
-            # Final signal
-            if passed_all:
-                if score >= 7:
-                    signal['signal'] = 'STRONG BUY'
-                    signal['color'] = '🟢🟢🟢'
-                    signal['css_class'] = 'buy-signal'
-                elif score >= 4:
-                    signal['signal'] = 'BUY'
-                    signal['color'] = '🟢🟢'
-                    signal['css_class'] = 'buy-signal'
-                elif score <= -7:
-                    signal['signal'] = 'STRONG SELL'
-                    signal['color'] = '🔴🔴🔴'
-                    signal['css_class'] = 'sell-signal'
-                elif score <= -4:
-                    signal['signal'] = 'SELL'
-                    signal['color'] = '🔴🔴'
-                    signal['css_class'] = 'sell-signal'
-                else:
-                    signal['signal'] = 'HOLD'
-                    signal['color'] = '🟡'
-                    signal['css_class'] = 'hold-signal'
-            else:
-                signal['signal'] = 'HOLD'
-                signal['color'] = '⚪'
-                signal['css_class'] = 'hold-signal'
-            
-            # SL/TP
+            latest = df.iloc[-1]
             atr = latest['atr']
-            price = latest['close']
+            current_price = latest['close']
             
-            mult = (1.0, 2.0, 3.5) if self.is_crypto(pair) else (2.0, 3.0, 5.0)
-            zone = {'Aggressive': 0.8, 'Moderate': 0.5, 'Conservative': 0.3}[entry_strategy]
+            signal = {
+                'pair': pair,
+                'price': current_price,
+                'timestamp': latest['timestamp'],
+                'is_crypto': self.is_crypto(pair),
+                'smc_score': smc['smc_score'],
+                'trad_score': trad['score'],
+                'total_score': total_score,
+                'confluence': confluence,
+                'smc_reasons': smc['smc_reasons'],
+                'trad_reasons': trad['trad_reasons'],
+                'smc': smc,
+                'trad': trad
+            }
+            
+            # Determine signal
+            if total_score >= 8:
+                signal['signal'] = 'STRONG BUY'
+                signal['color'] = '🟢🟢🟢'
+                signal['css_class'] = 'buy-signal'
+                signal['institutional'] = True
+            elif total_score >= 5:
+                signal['signal'] = 'BUY'
+                signal['color'] = '🟢🟢'
+                signal['css_class'] = 'buy-signal'
+                signal['institutional'] = True
+            elif total_score <= -8:
+                signal['signal'] = 'STRONG SELL'
+                signal['color'] = '🔴🔴🔴'
+                signal['css_class'] = 'sell-signal'
+                signal['institutional'] = True
+            elif total_score <= -5:
+                signal['signal'] = 'SELL'
+                signal['color'] = '🔴🔴'
+                signal['css_class'] = 'sell-signal'
+                signal['institutional'] = True
+            else:
+                return None
+            
+            # Calculate SL/TP
+            mult = (1.5, 3.0, 4.5) if self.is_crypto(pair) else (2.0, 3.0, 5.0)
+            zone = {'Conservative': 0.3, 'Moderate': 0.5, 'Aggressive': 0.8}[entry_strategy]
+            
+            # Use Order Block for entry if available
+            entry_price = current_price
+            if 'BUY' in signal['signal'] and smc['order_blocks']:
+                for ob in smc['order_blocks']['bullish_ob']:
+                    if ob['price_bottom'] <= current_price <= ob['price_top']:
+                        entry_price = ob['price_mid']
+                        signal['entry_type'] = 'Order Block Entry'
+                        break
+            elif 'SELL' in signal['signal'] and smc['order_blocks']:
+                for ob in smc['order_blocks']['bearish_ob']:
+                    if ob['price_bottom'] <= current_price <= ob['price_top']:
+                        entry_price = ob['price_mid']
+                        signal['entry_type'] = 'Order Block Entry'
+                        break
             
             if 'BUY' in signal['signal']:
-                signal['entry'] = price
-                signal['entry_low'] = price - (atr * zone)
-                signal['entry_high'] = price + (atr * zone)
-                signal['sl'] = price - (mult[0] * atr)
-                signal['tp1'] = price + (mult[1] * atr)
-                signal['tp2'] = price + (mult[2] * atr)
-            elif 'SELL' in signal['signal']:
-                signal['entry'] = price
-                signal['entry_low'] = price - (atr * zone)
-                signal['entry_high'] = price + (atr * zone)
-                signal['sl'] = price + (mult[0] * atr)
-                signal['tp1'] = price - (mult[1] * atr)
-                signal['tp2'] = price - (mult[2] * atr)
-            
-            signal['rsi'] = latest['rsi']
-            
-            return signal
-        except:
-            return None
-    
-    def screen_all_pairs(self, all_pairs, main_tf, enable_adx, adx_threshold, enable_sr, enable_mtf, mtf_strict, entry_strategy):
-        signals = []
-        
-        st.markdown("---")
-        st.header("🔄 Scanning...")
-        
-        progress = st.progress(0)
-        status = st.empty()
-        
-        for i, pair in enumerate(all_pairs):
-            status.text(f"📊 {pair}... ({i+1}/{len(all_pairs)})")
-            
-            df = self.fetch_data(pair, main_tf)
-            if df is not None and len(df) >= 50:
-                df = self.calculate_indicators(df)
-                if df is not None:
-                    sig = self.generate_signal(df, pair, entry_strategy, enable_adx, adx_threshold, enable_sr, enable_mtf, mtf_strict, main_tf)
-                    if sig:
-                        signals.append(sig)
-            
-            progress.progress((i + 1) / len(all_pairs))
-            time.sleep(0.3)
-        
-        status.empty()
-        progress.empty()
-        
-        st.success(f"✅ Analyzed {len(signals)} pairs")
-        
-        return signals
-    
-    def display_signals(self, signals):
-        if not signals:
-            st.warning("⚠️ No pairs analyzed. Check your settings.")
-            return
-        
-        buy = [s for s in signals if 'BUY' in s['signal']]
-        sell = [s for s in signals if 'SELL' in s['signal']]
-        hold = [s for s in signals if s['signal'] == 'HOLD']
-        filtered = [s for s in hold if 'FILTERED' in s['filter_status']]
-        
-        st.markdown("---")
-        st.header("📊 Results")
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Total", len(signals))
-        col2.metric("🟢 Buy", len(buy))
-        col3.metric("🔴 Sell", len(sell))
-        col4.metric("🟡 Hold", len(hold) - len(filtered))
-        col5.metric("⚪ Filtered", len(filtered))
-        
-        # Display BUY
-        if buy:
-            st.markdown("### 🟢 BUY SIGNALS")
-            for s in sorted(buy, key=lambda x: x['score'], reverse=True):
-                self.display_signal_card(s)
-        
-        # Display SELL
-        if sell:
-            st.markdown("### 🔴 SELL SIGNALS")
-            for s in sorted(sell, key=lambda x: abs(x['score']), reverse=True):
-                self.display_signal_card(s)
-        
-        # Display HOLD (not filtered)
-        active_hold = [h for h in hold if 'FILTERED' not in h['filter_status']]
-        if active_hold:
-            with st.expander(f"🟡 HOLD SIGNALS ({len(active_hold)}) - Click to expand"):
-                for s in active_hold:
-                    dec = 2 if (s['is_crypto'] or 'XAU' in s['pair']) else 5
-                    st.markdown(f"""
-                    **{s['color']} {s['pair']}** - Score: {s['score']:+d} | RSI: {s['rsi']:.1f} | Price: ${s['price']:,.{dec}f}
-                    
-                    Reasons: {', '.join(s['reasons']) if s['reasons'] else 'Weak setup'}
-                    """)
-        
-        # Display FILTERED
-        if filtered:
-            with st.expander(f"⚪ FILTERED OUT ({len(filtered)}) - Why they didn't pass"):
-                for s in filtered:
-                    st.markdown(f"""
-                    **{s['pair']}** - {s['filter_status']}
-                    
-                    Score: {s['score']:+d} | Reasons: {', '.join(s['reasons']) if s['reasons'] else 'N/A'}
-                    """)
-        
-        # No tradeable signals warning
-        if not buy and not sell:
-            st.warning("""
-            ### ⚠️ No Tradeable Signals Found
-            
-            **What to do:**
-            1. **Relax Filters:**
-               - Lower ADX threshold to 20
-               - Change MTF to 'Loose'
-               - Disable some filters temporarily
-            
-            2. **Try Different Timeframe:**
-               - Current might be choppy
-               - Try 1h or 4h
-            
-            3. **Add More Pairs:**
-               - More pairs = more opportunities
-            
-            4. **Wait for Better Setup:**
-               - Market might be ranging
-               - Come back in 1-2 hours
-            
-            💡 **This is normal!** Not every scan produces signals. Quality > Quantity.
-            """)
-        
-        st.markdown("---")
-        st.info("""
-        ### 💡 Understanding Results
-        
-        - **🟢 BUY/SELL**: Trade these (passed all filters)
-        - **🟡 HOLD**: Weak setup, wait for better entry
-        - **⚪ FILTERED**: Didn't pass ADX/MTF filters
-        
-        **Tip:** If too many filtered, lower filter strictness!
-        """)
-    
-    def display_signal_card(self, s):
-        dec = 2 if (s['is_crypto'] or 'XAU' in s['pair']) else 5
-        badge = "<span class='crypto-badge'>CRYPTO</span>" if s['is_crypto'] else ""
-        mtf_badge = "<span class='mtf-badge'>MTF ✓</span>" if s.get('mtf', {}).get('confirmed', False) else ""
-        
-        mtf_html = ""
-        if s.get('mtf'):
-            m = s['mtf']
-            mtf_html = f"""
-            <div class='mtf-box'>
-                <strong>Multi-Timeframe:</strong> {m['main_dir']} ({m['main_score']:+d}) | 
-                Alignment: {m['alignment']:.0f}%
-            </div>
-            """
-        
-        st.markdown(f"""
-        <div class='{s["css_class"]}'>
-            <h2>{s['color']} {s['pair']} - {s['signal']} {badge} {mtf_badge}</h2>
-            
-            <div class='entry-zone'>
-                <strong>Entry:</strong> ${s['entry']:,.{dec}f} 
-                (Zone: ${s['entry_low']:,.{dec}f} - ${s['entry_high']:,.{dec}f})
-            </div>
-            
-            <p><strong>SL:</strong> ${s['sl']:,.{dec}f} | 
-            <strong>TP1:</strong> ${s['tp1']:,.{dec}f} | 
-            <strong>TP2:</strong> ${s['tp2']:,.{dec}f}</p>
-            
-            <p><strong>Score:</strong> {s['score']:+d} | 
-            <strong>RSI:</strong> {s['rsi']:.1f} | 
-            <strong>Filters:</strong> {', '.join(s['filters']) if s['filters'] else 'None'}</p>
-            
-            {mtf_html}
-            
-            <p><strong>Reasons:</strong> {', '.join(s['reasons'])}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-screener = ProfessionalScreener()
-
-if st.button("🚀 START SCAN"):
-    all_pairs = forex_pairs + metal_pairs + crypto_pairs
-    
-    if all_pairs:
-        signals = screener.screen_all_pairs(
-            all_pairs, main_interval, enable_adx, 
-            adx_threshold if enable_adx else 0,
-            enable_sr, enable_mtf,
-            mtf_strict if enable_mtf else "Moderate",
-            entry_strategy
-        )
-        screener.display_signals(signals)
-    else:
-        st.warning("⚠️ Select pairs first!")
-
-st.markdown("---")
-st.caption("v3.1 PRO - Improved Display | Shows All Signals")
+                signal['entry'] = entry_price
+                signal['entry_low'] = entry_price - (atr * zone)
+                signal['entry_high'] = entry_price + (atr * zone)
+                signal['sl'] = entry_price - (mult[0] * atr)
+                signal['tp1'] = entry_price + (mult[1] * atr)
+                signal['tp2'] = entry_price + (mult[2] * atr)
+                signal['risk_reward'] = round(mult[1] / mult[0], 2)
+            else:
+                signal['entry'] = entry_price
+                signal['entry_low'] = entry_price - (atr * zone)
+                signal['entry_high'] = entry_price + (atr * zone)
+                signal['sl'] = entry_price + (mult[0] * atr)
+                signal['tp1'] = entry_
