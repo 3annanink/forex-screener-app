@@ -62,6 +62,13 @@ st.markdown("""
         font-size: 0.8em;
         margin-left: 10px;
     }
+    .entry-zone {
+        background: rgba(255,255,255,0.2);
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        border-left: 4px solid #fff;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -76,7 +83,7 @@ st.markdown("""
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);'>
     <h1 style='margin: 0; font-size: 2.5em;'>🔍 FOREX, METAL & CRYPTO SCREENER</h1>
     <p style='margin: 10px 0 0 0; font-size: 1.2em;'>Real-time Market Analysis | Mobile-Friendly</p>
-    <p style='margin: 5px 0 0 0; font-size: 0.9em; opacity: 0.9;'>✨ Now with Cryptocurrency Support!</p>
+    <p style='margin: 5px 0 0 0; font-size: 0.9em; opacity: 0.9;'>✨ With Smart Entry Zones!</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -120,6 +127,18 @@ with st.sidebar:
         format_func=lambda x: x
     )
     interval_value = {'5 Minutes': '5m', '15 Minutes': '15m', '1 Hour': '1h', '4 Hours': '4h', '1 Day': '1d'}[interval]
+    
+    st.subheader("🎯 Entry Strategy")
+    entry_strategy = st.radio(
+        "Choose Entry Type",
+        ["Aggressive", "Moderate", "Conservative"],
+        index=1,
+        help="""
+        • Aggressive: Wider entry zone, easier to enter
+        • Moderate: Balanced entry zone (recommended)
+        • Conservative: Tight entry zone, better price
+        """
+    )
     
     st.markdown("---")
     st.info("💡 **Tip:** For crypto, use 1h or 4h timeframe for better signals")
@@ -243,7 +262,7 @@ class ForexMetalCryptoScreener:
         except Exception as e:
             return None
     
-    def generate_signal(self, df, pair):
+    def generate_signal(self, df, pair, entry_strategy='Moderate'):
         if df is None or len(df) < 50:
             return None
         
@@ -429,39 +448,55 @@ class ForexMetalCryptoScreener:
             
             # Different ATR multipliers for different asset types
             if self.is_crypto(pair):
-                # Crypto has higher volatility
                 atr_mult_sl = 1.0
                 atr_mult_tp1 = 2.0
                 atr_mult_tp2 = 3.5
             elif 'XAU' in pair or 'XAG' in pair:
-                # Metals
                 atr_mult_sl = 1.5
                 atr_mult_tp1 = 2.5
                 atr_mult_tp2 = 4.0
             else:
-                # Forex
                 atr_mult_sl = 2.0
                 atr_mult_tp1 = 3.0
                 atr_mult_tp2 = 5.0
             
+            # Entry zone calculation based on strategy
+            if entry_strategy == 'Aggressive':
+                zone_multiplier = 0.8  # 80% of ATR for wider zone
+            elif entry_strategy == 'Conservative':
+                zone_multiplier = 0.3  # 30% of ATR for tighter zone
+            else:  # Moderate
+                zone_multiplier = 0.5  # 50% of ATR
+            
+            entry_zone_range = atr * zone_multiplier
+            
             if 'BUY' in signal['signal']:
-                signal['entry'] = current_price
+                signal['best_entry'] = current_price
+                signal['entry_zone_low'] = current_price - entry_zone_range
+                signal['entry_zone_high'] = current_price + entry_zone_range
                 signal['sl'] = current_price - (atr_mult_sl * atr)
                 signal['tp1'] = current_price + (atr_mult_tp1 * atr)
                 signal['tp2'] = current_price + (atr_mult_tp2 * atr)
                 signal['risk_reward'] = round(atr_mult_tp1 / atr_mult_sl, 2)
+                signal['entry_type'] = entry_strategy
             elif 'SELL' in signal['signal']:
-                signal['entry'] = current_price
+                signal['best_entry'] = current_price
+                signal['entry_zone_low'] = current_price - entry_zone_range
+                signal['entry_zone_high'] = current_price + entry_zone_range
                 signal['sl'] = current_price + (atr_mult_sl * atr)
                 signal['tp1'] = current_price - (atr_mult_tp1 * atr)
                 signal['tp2'] = current_price - (atr_mult_tp2 * atr)
                 signal['risk_reward'] = round(atr_mult_tp1 / atr_mult_sl, 2)
+                signal['entry_type'] = entry_strategy
             else:
-                signal['entry'] = current_price
+                signal['best_entry'] = current_price
+                signal['entry_zone_low'] = None
+                signal['entry_zone_high'] = None
                 signal['sl'] = None
                 signal['tp1'] = None
                 signal['tp2'] = None
                 signal['risk_reward'] = None
+                signal['entry_type'] = None
             
             # Add technical values
             signal['rsi'] = latest['rsi']
@@ -476,7 +511,7 @@ class ForexMetalCryptoScreener:
         except Exception as e:
             return None
     
-    def screen_all_pairs(self, all_pairs, interval):
+    def screen_all_pairs(self, all_pairs, interval, entry_strategy):
         signals = []
         
         st.markdown("---")
@@ -495,7 +530,7 @@ class ForexMetalCryptoScreener:
             if df is not None and len(df) >= 50:
                 df = self.calculate_indicators(df)
                 if df is not None:
-                    signal = self.generate_signal(df, pair)
+                    signal = self.generate_signal(df, pair, entry_strategy)
                     if signal:
                         signals.append(signal)
             
@@ -562,11 +597,35 @@ class ForexMetalCryptoScreener:
                 
                 crypto_badge = f"<span class='crypto-badge'>CRYPTO</span>" if s['is_crypto'] else ""
                 
+                # Calculate entry zone range in pips/points
+                if 'JPY' in s['pair']:
+                    zone_range = (s['entry_zone_high'] - s['entry_zone_low']) * 100
+                    zone_unit = "pips"
+                elif s['is_crypto']:
+                    zone_range = s['entry_zone_high'] - s['entry_zone_low']
+                    zone_unit = "USD"
+                else:
+                    zone_range = (s['entry_zone_high'] - s['entry_zone_low']) * 10000
+                    zone_unit = "pips"
+                
                 st.markdown(f"""
                 <div class='{s["css_class"]}'>
                     <h2>{s['color']} {s['pair']} - {s['signal']} {crypto_badge}</h2>
-                    <h3>💰 Entry: ${s['price']:,.{decimals}f}</h3>
-                    <p style='font-size: 1.1em;'>
+                    
+                    <div class='entry-zone'>
+                        <h3>🎯 ENTRY ZONE ({s['entry_type']})</h3>
+                        <p style='font-size: 1.2em; margin: 5px 0;'>
+                            <strong>📍 Best Entry:</strong> ${s['best_entry']:,.{decimals}f}
+                        </p>
+                        <p style='font-size: 1.1em; margin: 5px 0;'>
+                            <strong>📊 Entry Range:</strong> ${s['entry_zone_low']:,.{decimals}f} - ${s['entry_zone_high']:,.{decimals}f}
+                        </p>
+                        <p style='font-size: 0.9em; opacity: 0.9; margin: 5px 0;'>
+                            Zone Width: {zone_range:.1f} {zone_unit} | You can enter anywhere in this range
+                        </p>
+                    </div>
+                    
+                    <p style='font-size: 1.1em; margin-top: 15px;'>
                         <strong>🛑 Stop Loss:</strong> ${s['sl']:,.{decimals}f} | 
                         <strong>🎯 TP1:</strong> ${s['tp1']:,.{decimals}f} | 
                         <strong>🎯 TP2:</strong> ${s['tp2']:,.{decimals}f}
@@ -600,11 +659,35 @@ class ForexMetalCryptoScreener:
                 
                 crypto_badge = f"<span class='crypto-badge'>CRYPTO</span>" if s['is_crypto'] else ""
                 
+                # Calculate entry zone range
+                if 'JPY' in s['pair']:
+                    zone_range = (s['entry_zone_high'] - s['entry_zone_low']) * 100
+                    zone_unit = "pips"
+                elif s['is_crypto']:
+                    zone_range = s['entry_zone_high'] - s['entry_zone_low']
+                    zone_unit = "USD"
+                else:
+                    zone_range = (s['entry_zone_high'] - s['entry_zone_low']) * 10000
+                    zone_unit = "pips"
+                
                 st.markdown(f"""
                 <div class='{s["css_class"]}'>
                     <h2>{s['color']} {s['pair']} - {s['signal']} {crypto_badge}</h2>
-                    <h3>💰 Entry: ${s['price']:,.{decimals}f}</h3>
-                    <p style='font-size: 1.1em;'>
+                    
+                    <div class='entry-zone'>
+                        <h3>🎯 ENTRY ZONE ({s['entry_type']})</h3>
+                        <p style='font-size: 1.2em; margin: 5px 0;'>
+                            <strong>📍 Best Entry:</strong> ${s['best_entry']:,.{decimals}f}
+                        </p>
+                        <p style='font-size: 1.1em; margin: 5px 0;'>
+                            <strong>📊 Entry Range:</strong> ${s['entry_zone_low']:,.{decimals}f} - ${s['entry_zone_high']:,.{decimals}f}
+                        </p>
+                        <p style='font-size: 0.9em; opacity: 0.9; margin: 5px 0;'>
+                            Zone Width: {zone_range:.1f} {zone_unit} | You can enter anywhere in this range
+                        </p>
+                    </div>
+                    
+                    <p style='font-size: 1.1em; margin-top: 15px;'>
                         <strong>🛑 Stop Loss:</strong> ${s['sl']:,.{decimals}f} | 
                         <strong>🎯 TP1:</strong> ${s['tp1']:,.{decimals}f} | 
                         <strong>🎯 TP2:</strong> ${s['tp2']:,.{decimals}f}
@@ -647,26 +730,34 @@ class ForexMetalCryptoScreener:
         st.info("""
         ### 💡 Trading Tips
         
-        **General:**
-        - Risk Management: Never risk more than 1-2% of your capital per trade
-        - Confirmation: Always confirm signals with higher timeframes
-        - Stop Loss: NEVER trade without a stop loss
-        - Take Profit: Close 50% at TP1, let the rest run to TP2
+        **Entry Zone Strategy:**
+        - **Best Entry:** Ideal price for maximum profit potential
+        - **Entry Range:** You can enter anywhere in this zone
+        - **Aggressive:** Wider zone (easier to catch), higher risk
+        - **Moderate:** Balanced zone (recommended for most traders)
+        - **Conservative:** Tight zone (better price), might miss some trades
+        
+        **How to Use Entry Zones:**
+        1. Set limit order at "Best Entry" price
+        2. If price doesn't reach, you can still enter within the zone
+        3. The closer to "Best Entry", the better your risk/reward
+        4. Don't chase price outside the zone
+        
+        **General Trading Rules:**
+        - Risk Management: Never risk more than 1-2% per trade
+        - Use Stop Loss: ALWAYS set stop loss before entry
+        - Take Profit Strategy: Close 50% at TP1, let rest run to TP2
+        - Confirmation: Check higher timeframes before entry
         
         **Crypto-Specific:**
-        - Higher volatility: Use tighter stop losses
-        - Best timeframes: 1h, 4h, or 1d for swing trades
-        - Most active: UTC evening hours (overlap Asia-Europe)
-        - Weekend trading: Crypto markets open 24/7 including weekends
-        - News sensitive: Monitor crypto news and social sentiment
+        - Higher volatility = Use tighter zones
+        - 24/7 market = Can enter anytime
+        - News sensitive = Monitor Twitter/Telegram
         
         **Forex-Specific:**
-        - Best sessions: London (14:00-23:00 WIB) and NY (19:00-04:00 WIB)
-        - Avoid trading during major news (NFP, FOMC, Central Bank decisions)
-        
-        **Metals-Specific:**
-        - Gold: Safe haven, inverse correlation with USD
-        - Silver: More volatile than gold, industrial demand factor
+        - Best sessions: London (14:00 WIB) & NY (19:00 WIB)
+        - Avoid major news events
+        - Lower spreads during high liquidity
         """)
         
         # Last update time
@@ -683,7 +774,7 @@ if st.button("🔄 SCAN NOW", key="scan_button"):
     if not all_pairs:
         st.warning("⚠️ Please select at least one pair from the sidebar!")
     else:
-        signals = screener.screen_all_pairs(all_pairs, interval_value)
+        signals = screener.screen_all_pairs(all_pairs, interval_value, entry_strategy)
         screener.display_signals(signals)
 
 # Footer
@@ -699,7 +790,7 @@ st.markdown("""
         Made with ❤️ for traders | Powered by Yahoo Finance & Streamlit
     </p>
     <p style='font-size: 0.8em; opacity: 0.7;'>
-        v2.0 - Now with Cryptocurrency Support!
+        v2.1 - With Smart Entry Zones!
     </p>
 </div>
 """, unsafe_allow_html=True)
